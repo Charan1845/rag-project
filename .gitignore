@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+
+# Data, indexes and models (large; never commit)
+data/
+*.faiss
+*.index
+chroma/
+weights/
+
+# Secrets (API keys go in .env, never in code)
+.env
+.streamlit/secrets.toml
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
