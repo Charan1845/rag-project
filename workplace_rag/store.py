@@ -1,0 +1,31 @@
+"""Load extracted records and open the vector store."""
+
+import json
+from functools import lru_cache
+
+from langchain_chroma import Chroma
+from langchain_ollama import OllamaEmbeddings
+
+from . import normalize
+from .config import CHROMA_DIR, COLLECTION, EMBED_MODEL, OLLAMA_BASE_URL, PROCESSED_DIR
+
+POSTS = PROCESSED_DIR / "posts.jsonl"
+
+
+def load_records(workplace_only: bool = True) -> list[dict]:
+    """All extracted posts, re-normalized. Later lines win if a post appears twice."""
+    if not POSTS.exists():
+        return []
+    recs: dict[str, dict] = {}
+    with POSTS.open(encoding="utf-8") as f:
+        for line in f:
+            r = normalize.record(json.loads(line))
+            recs[r["id"]] = r
+    out = list(recs.values())
+    return [r for r in out if r["is_workplace_experience"]] if workplace_only else out
+
+
+@lru_cache(maxsize=1)
+def vectorstore() -> Chroma:
+    emb = OllamaEmbeddings(model=EMBED_MODEL, base_url=OLLAMA_BASE_URL)
+    return Chroma(collection_name=COLLECTION, embedding_function=emb, persist_directory=str(CHROMA_DIR))
