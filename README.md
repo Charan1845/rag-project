@@ -19,10 +19,37 @@ and get an answer built from community discussions, with **counts and citations*
 ## Pipeline
 
 ```
-ingest_hn.py   Algolia HN Search API  ->  data/raw/hn.jsonl
-extract.py     qwen2.5:7b (Ollama), JSON-schema output  ->  data/processed/posts.jsonl
-index.py       nomic-embed-text  ->  Chroma (data/chroma)
-query.py       question -> filters -> matching posts -> counts + semantic top-k -> cited answer
+ingest_hn.py          keyword search over HN comments  ->  data/raw/hn.jsonl
+ingest_hn_threads.py  whole "Ask HN" workplace threads  ->  data/raw/hn_threads.jsonl
+ingest_reddit.py      Reddit Data API (needs keys in .env)  ->  data/raw/reddit.jsonl
+extract.py            qwen2.5:7b (Ollama), JSON-schema output  ->  data/processed/posts.jsonl
+index.py              nomic-embed-text  ->  Chroma: post chunks + one document per extracted opinion
+query.py              question -> filters -> matching posts -> counts + top opinions -> cited answer
+evaluate.py           retrieval relevance on a labelled question set
+```
+
+Retrieval ranks the short extracted opinions ("TCS: managers expect weekend calls") rather than whole
+posts, so a long comment that mentions a company once can't outrank a post that is actually about the question.
+A company tag is only kept if the post really names it (so "my 7 figure TCs" is not read as TCS).
+
+## Evaluation
+
+15 questions with intended filters (`eval/questions.json`); each cited source is labelled relevant or not
+(`eval/labels.jsonl`, ids only, no post text). Relevant = the post says something about that company (or city)
+on that topic.
+
+| Retrieval | Precision@5 | Top source relevant |
+|---|---|---|
+| Whole-post chunks (v1) | 48% | 67% |
+| Extracted opinions (v2) | 51% | 73% |
+
+The main limit is coverage, not ranking: e.g. only 8 posts mention TCS and none discuss its hours.
+That is why the next step is better sources (Ask HN threads, Reddit).
+
+```bash
+python -m workplace_rag.evaluate run --mode opinion
+python -m workplace_rag.evaluate label     # prints sources that still need a label
+python -m workplace_rag.evaluate score
 ```
 
 Everything runs locally and free (tested on an RTX 5060 Laptop GPU with 8 GB of VRAM).
@@ -40,17 +67,25 @@ python -m workplace_rag.extract            # resumable, ~3 s/post
 python -m workplace_rag.index
 python -m workplace_rag.cli --stats
 python -m workplace_rag.cli "How is work life balance at TCS?"
+
+streamlit run streamlit_app.py             # web UI at http://localhost:8501
 ```
+
+The web UI shows the detected filters (which you can override), matching post and opinion counts,
+a sentiment breakdown, a thin-evidence warning, the answer, and each cited source with its extracted opinions.
 
 ## Data and ethics
 
-- Sources: official APIs only (Hacker News via Algolia; Reddit Data API planned). No Glassdoor/AmbitionBox scraping.
+- Sources: official APIs only (Hacker News via Algolia; Reddit Data API with app-only, read-only auth).
+  No Glassdoor/AmbitionBox scraping.
 - Author names are not stored. Raw data is never committed (`data/` is gitignored).
 - Non-commercial project for learning.
 
 ## Roadmap
 
-- [ ] Reddit source (r/developersIndia, r/IndianWorkplace, r/cscareerquestions)
-- [ ] Streamlit UI
-- [ ] Evaluation: ~200 hand-labelled posts for extraction accuracy, answer faithfulness checks,
-      comparison with Stack Overflow Developer Survey benchmarks
+- [x] Streamlit UI
+- [x] Retrieval relevance eval + opinion-level retrieval
+- [x] Ask HN thread source
+- [ ] Reddit source (code ready; needs API keys)
+- [ ] Supporting quote per opinion + first-hand flag in extraction
+- [ ] Extraction accuracy (~200 hand-labelled posts), answer faithfulness, Stack Overflow survey benchmarks

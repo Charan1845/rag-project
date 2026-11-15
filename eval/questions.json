@@ -1,0 +1,17 @@
+[
+  {"id": "q01", "question": "How is work life balance at TCS?", "filters": {"company": "TCS", "topic": "work_life_balance"}},
+  {"id": "q02", "question": "How is the pay and salary hike at TCS?", "filters": {"company": "TCS", "topic": "compensation"}},
+  {"id": "q03", "question": "Is Infosys a good place to grow your career?", "filters": {"company": "Infosys", "topic": "career_growth"}},
+  {"id": "q04", "question": "How are managers at Infosys?", "filters": {"company": "Infosys", "topic": "management"}},
+  {"id": "q05", "question": "How is the pay at Infosys?", "filters": {"company": "Infosys", "topic": "compensation"}},
+  {"id": "q06", "question": "How is work life balance at Wipro?", "filters": {"company": "Wipro", "topic": "work_life_balance"}},
+  {"id": "q07", "question": "How are managers at Amazon?", "filters": {"company": "Amazon", "topic": "management"}},
+  {"id": "q08", "question": "How is work life balance at Amazon?", "filters": {"company": "Amazon", "topic": "work_life_balance"}},
+  {"id": "q09", "question": "Is there job security at Amazon, what about PIPs and layoffs?", "filters": {"company": "Amazon", "topic": "layoffs_job_security"}},
+  {"id": "q10", "question": "How do promotions and career growth work at Google?", "filters": {"company": "Google", "topic": "career_growth"}},
+  {"id": "q11", "question": "What is the culture like at Google?", "filters": {"company": "Google", "topic": "culture"}},
+  {"id": "q12", "question": "How is work life balance at Microsoft?", "filters": {"company": "Microsoft", "topic": "work_life_balance"}},
+  {"id": "q13", "question": "How is work life balance at Meta?", "filters": {"company": "Meta", "topic": "work_life_balance"}},
+  {"id": "q14", "question": "How is the pay at Accenture?", "filters": {"company": "Accenture", "topic": "compensation"}},
+  {"id": "q15", "question": "What do people in Bangalore say about pay?", "filters": {"city": "Bangalore", "topic": "compensation"}}
+]

@@ -4,6 +4,10 @@ COMPANY_ALIASES = {
     "tcs": "TCS",
     "tata consultancy services": "TCS",
     "tata consultancy": "TCS",
+    "tata consultancy services ltd": "TCS",
+    "infosys ltd": "Infosys",
+    "infosys limited": "Infosys",
+    "wipro ltd": "Wipro",
     "infosys": "Infosys",
     "infy": "Infosys",
     "wipro": "Wipro",
@@ -113,6 +117,8 @@ COUNTRIES = {"india", "usa", "us", "united states", "uk", "united kingdom", "can
 
 
 def company(value: str | None) -> str | None:
+    if value and value.strip().lower().rstrip(".") in COMPANY_ALIASES:  # "Tata Consultancy Services"
+        return COMPANY_ALIASES[value.strip().lower().rstrip(".")]
     if value and any(w in value.lower() for w in GENERIC_COMPANY_WORDS):
         return None
     return _norm(value, COMPANY_ALIASES)
@@ -152,12 +158,32 @@ def country(value: str | None) -> str | None:
     return _norm(value, COUNTRY_ALIASES)
 
 
+def mentioned(name: str, text: str) -> bool:
+    """Is this company actually named in the text? Acronyms (TCS, HCL, AWS) must match case-sensitively,
+    so "my 7 figure TCs" (total compensation) is not read as TCS. Other names match as a word prefix,
+    so "Googler" counts for Google."""
+    import re
+    names = {name} | {a for a, c in COMPANY_ALIASES.items() if c == name}
+    for n in names:
+        if len(n) <= 4:
+            # Short names only count as "TCS"/"TCS's" or "Meta"/"Infy", never "TCs" or "meta".
+            if re.search(rf"\b(?:{re.escape(n.upper())}|{re.escape(n.capitalize())})\b", text):
+                return True
+        elif re.search(rf"\b{re.escape(n)}", text, re.I):
+            return True
+    return False
+
+
 def record(rec: dict) -> dict:
     """Re-normalize an extracted record (safe to run repeatedly)."""
-    companies = sorted({c for c in map(company, rec.get("companies", [])) if c})
+    text = f"{rec.get('title') or ''}\n{rec.get('text') or ''}"
+    # Drop employers the model inferred but the post never names (e.g. "TCs" read as TCS).
+    companies = sorted({c for c in map(company, rec.get("companies", [])) if c and mentioned(c, text)})
     opinions = []
     for op in rec.get("opinions", []):
         op = {**op, "company": company(op.get("company"))}
+        if op["company"] and not mentioned(op["company"], text):
+            op["company"] = None
         # A post about one employer: unattributed opinions are about that employer.
         if op["company"] is None and len(companies) == 1:
             op["company"] = companies[0]

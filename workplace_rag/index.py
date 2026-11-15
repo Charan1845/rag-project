@@ -10,7 +10,7 @@ Incremental: chunks already in the store are skipped.
 
 from langchain_core.documents import Document
 
-from .store import load_records, vectorstore
+from .store import load_records, opinion_store, vectorstore
 
 CHUNK = 1500
 OVERLAP = 200
@@ -33,7 +33,30 @@ def chunks(text: str) -> list[str]:
     return out
 
 
+def index_opinions() -> None:
+    """One small document per extracted opinion, used by opinion-level retrieval."""
+    vs = opinion_store()
+    existing = set(vs.get(include=[])["ids"])
+    docs, ids = [], []
+    for r in load_records():
+        for i, op in enumerate(r["opinions"]):
+            oid = f"{r['id']}~op{i}"
+            if oid in existing:
+                continue
+            company = op["company"] or ""
+            ids.append(oid)
+            docs.append(Document(
+                page_content=f"search_document: {company} {op['topic'].replace('_', ' ')}: {op['claim']}".strip(),
+                metadata={"post_id": r["id"], "company": company, "topic": op["topic"],
+                          "sentiment": op["sentiment"], "claim": op["claim"]},
+            ))
+    for i in range(0, len(docs), 128):
+        vs.add_documents(docs[i:i + 128], ids=ids[i:i + 128])
+    print(f"Opinion index has {len(existing) + len(docs)} opinions ({len(docs)} new)")
+
+
 def main() -> None:
+    index_opinions()
     vs = vectorstore()
     existing = set(vs.get(include=[])["ids"])
     docs, ids = [], []

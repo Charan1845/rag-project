@@ -9,6 +9,7 @@ processed are skipped, so you can stop and restart at any time.
 
 import argparse
 import json
+import re
 import time
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -72,11 +73,27 @@ def build_chain():
 
 
 def load_raw() -> list[dict]:
-    posts = []
+    """All raw posts from every source file, de-duplicated by id (the same HN comment can come
+    from both keyword search and thread crawling)."""
+    posts: dict[str, dict] = {}
     for path in sorted(RAW_DIR.glob("*.jsonl")):
         with path.open(encoding="utf-8") as f:
-            posts.extend(json.loads(line) for line in f)
-    return posts
+            for line in f:
+                p = json.loads(line)
+                posts.setdefault(p["id"], p)
+    return list(posts.values())
+
+
+FIRST_PERSON = re.compile(r"\b(I|I've|I'm|my)\b.{0,40}\b(work|worked|working|joined|manager|team|job)", re.I)
+INDIA = re.compile(r"\b(india|indian|bangalore|bengaluru|hyderabad|pune|chennai|mumbai|gurgaon|noida)\b", re.I)
+
+
+def worth_extracting(post: dict) -> bool:
+    """Cheap pre-filter for big crawls: names an employer (or India) and speaks from experience.
+    Extraction costs ~3 s/post on a laptop GPU, so we spend it where filters can use the result."""
+    text = f"{post['title']} {post['text']}"
+    named = any(normalize.mentioned(c, text) for c in set(normalize.COMPANY_ALIASES.values())) or INDIA.search(text)
+    return bool(named and FIRST_PERSON.search(post["text"]))
 
 
 def done_ids() -> set[str]:
@@ -102,11 +119,14 @@ def to_record(post: dict, ex: Extraction) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=None, help="process at most N new posts")
+    ap.add_argument("--prefilter", action="store_true",
+                    help="only posts that name an employer/India and are written from experience")
     args = ap.parse_args()
 
     chain = build_chain()
     skip = done_ids()
-    todo = [p for p in load_raw() if p["id"] not in skip][: args.limit]
+    todo = [p for p in load_raw() if p["id"] not in skip and (not args.prefilter or worth_extracting(p))]
+    todo = todo[: args.limit]
     print(f"{len(skip)} already done, processing {len(todo)}")
 
     start = time.time()

@@ -26,6 +26,19 @@ def load_records(workplace_only: bool = True) -> list[dict]:
 
 
 @lru_cache(maxsize=1)
+def _embeddings() -> OllamaEmbeddings:
+    return OllamaEmbeddings(model=EMBED_MODEL, base_url=OLLAMA_BASE_URL)
+
+
+@lru_cache(maxsize=1)
 def vectorstore() -> Chroma:
-    emb = OllamaEmbeddings(model=EMBED_MODEL, base_url=OLLAMA_BASE_URL)
-    return Chroma(collection_name=COLLECTION, embedding_function=emb, persist_directory=str(CHROMA_DIR))
+    """Post chunks (v1 retrieval)."""
+    return Chroma(collection_name=COLLECTION, embedding_function=_embeddings(), persist_directory=str(CHROMA_DIR))
+
+
+@lru_cache(maxsize=1)
+def opinion_store() -> Chroma:
+    """One document per extracted opinion (v2 retrieval). nomic-embed-text expects
+    'search_document: ' / 'search_query: ' prefixes, so documents and queries carry them."""
+    return Chroma(collection_name="opinions", embedding_function=_embeddings(),
+                  persist_directory=str(CHROMA_DIR))
