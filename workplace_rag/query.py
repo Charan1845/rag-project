@@ -44,14 +44,14 @@ ANSWER_PROMPT = ChatPromptTemplate.from_messages([
      "- Use ONLY the numbered posts below. Cite them like [1] or [2][3] after each claim.\n"
      "- Attribute everything: 'posters say', 'one commenter reports'. Never state claims about a "
      "company as fact.\n"
-     "- Mention both positive and negative views if they exist. The counts are of OPINIONS, not posts "
-     "(one post can hold several opinions): say e.g. '7 of 13 opinions were negative', never 'N posts'.\n"
+     "- Mention both positive and negative views if they exist. The overall lean given below was "
+     "computed from all matching opinions: state it in words and do not contradict it.\n"
+     "- Do NOT state any counts, fractions or percentages of posts or opinions: exact counts are shown "
+     "to the reader separately.\n"
      "- Only attribute a view to a company if that post's 'company' field lists it.\n"
      "- If the posts do not answer the question, say so plainly.\n"
      "- 4-8 sentences. No names of people."),
-    ("human", "Question: {question}\n\n{n} posts match. Opinion counts across them ({total} opinions): "
-              "{stats}\n\n"
-              "Posts:\n{context}"),
+    ("human", "Question: {question}\n\nOverall lean of all matching opinions: {lean}\n\nPosts:\n{context}"),
 ])
 
 # Least important first: when nothing matches we drop these one at a time.
@@ -68,6 +68,7 @@ class Answer:
     answer: str
     sources: list[dict] = field(default_factory=list)
     thin_evidence: bool = False
+    evidence: str = ""
 
 
 def _llm():
@@ -96,16 +97,54 @@ def named_employer(question: str) -> str | None:
 def parse_filters(question: str) -> dict:
     f = (FILTER_PROMPT | _llm().with_structured_output(Filters, method="json_schema")).invoke(
         {"question": question})
-    # Exact matches against the alias lists beat the 7B model, which sometimes skips a field.
+    # Exact matches against keyword lists beat the 7B model, which sometimes skips or invents a field.
+    # Topics come from keywords only. The model invents one for general questions ("Is it worth
+    # joining Flipkart?" -> compensation), which wrongly narrows them; no keyword = general question.
+    topic = keyword_match(question, TOPIC_KEYWORDS)
+    level = keyword_match(question, LEVEL_KEYWORDS)
     return {
         "company": (normalize.find_in_text(question, normalize.COMPANY_ALIASES)
                     or normalize.company(f.company) or named_employer(question)),
         "city": normalize.find_in_text(question, normalize.CITY_ALIASES) or normalize.city(f.city),
         "country": normalize.country(f.country),
-        "role": normalize.role(f.role),
-        "experience_level": f.experience_level if f.experience_level != "unknown" else None,
-        "topic": f.topic if f.topic != "other" else None,
+        "role": keyword_match(question, ROLE_KEYWORDS) or normalize.role(f.role),
+        "experience_level": level or (f.experience_level if f.experience_level != "unknown" else None),
+        "topic": topic,
     }
+
+
+TOPIC_KEYWORDS = {
+    "work_life_balance": r"wlb|work[- ]?life|hours|overtime|weekends?|burn ?out|on-?call|stress",
+    "compensation": r"pay|paid|salar(?:y|ies)|hikes?|appraisal|bonus|comp|compensation|ctc|stock|rsus?",
+    "management": r"managers?|boss|leadership|manag(?:ement|ing)",
+    "career_growth": r"promotions?|promoted|career|growth|grow",
+    "layoffs_job_security": r"layoffs?|laid off|fired|job security|pips?|hire[- ]to[- ]fire",
+    "interview_hiring": r"interviews?|hiring|recruit(?:er|ing|ment)?",
+    "remote_work": r"wfh|remote|rto|return to office|work from home|hybrid",
+    "culture": r"culture|politics|toxic|environment",
+    "learning_tech": r"learn(?:ing)?|tech stack|training",
+}
+LEVEL_KEYWORDS = {
+    "junior": r"freshers?|new grads?|graduates?|juniors?|entry[- ]level|campus|freshers'",
+    "intern": r"interns?|internships?",
+    "senior": r"seniors?|staff engineers?|principal engineers?",
+    "manager": r"engineering managers?",
+}
+ROLE_KEYWORDS = {
+    "software engineer": r"sdes?|swes?|software (?:engineers?|developers?)|developers?|devs?|programmers?",
+    "data scientist": r"data scientists?",
+    "product manager": r"product managers?|pms?",
+    "devops engineer": r"devops|sres?",
+    "qa engineer": r"qa|testers?",
+}
+
+
+def keyword_match(question: str, table: dict[str, str]) -> str | None:
+    q = question.lower()
+    for value, pattern in table.items():
+        if re.search(rf"\b(?:{pattern})\b", q):
+            return value
+    return None
 
 
 def _opinions(rec: dict, f: dict) -> list[dict]:
@@ -123,9 +162,11 @@ def match(records: list[dict], f: dict) -> list[dict]:
             continue
         if f.get("country") and r["country"] != f["country"]:
             continue
-        if f.get("role") and r["role"] != f["role"]:
+        # Role and level are soft: most posts never state them, so only exclude posts that state a
+        # *different* one (a manager's post when asking about freshers), not posts that are silent.
+        if f.get("role") and r["role"] and r["role"] != f["role"]:
             continue
-        if f.get("experience_level") and r["experience_level"] != f["experience_level"]:
+        if f.get("experience_level") and r["experience_level"] not in (f["experience_level"], "unknown"):
             continue
         if f.get("topic") and not _opinions(r, f):
             continue
@@ -246,10 +287,48 @@ def ask(question: str, filters: dict | None = None, k: int = 8, mode: str = "opi
                 f"Extracted claims:\n{claims}\nExcerpt: {s['snippet'][:1200]}")
 
     context = "\n\n".join(block(s) for s in sources)
-    stats = ", ".join(f"{v} {s}" for s, v in sentiment.most_common()) or "not available"
-    text = (ANSWER_PROMPT | _llm()).invoke(
-        {"question": question, "n": len(matches), "total": sum(sentiment.values()), "stats": stats,
-         "context": context}).content
-
+    text = strip_counts((ANSWER_PROMPT | _llm()).invoke(
+        {"question": question, "context": context, "lean": lean(sentiment)}).content)
     thin = len(matches) < MIN_EVIDENCE
-    return Answer(question, f, dropped, len(matches), dict(sentiment), text, sources, thin)
+    return Answer(question, f, dropped, len(matches), dict(sentiment), text, sources, thin,
+                  evidence_line(len(matches), sentiment, f.get("topic")))
+
+
+# "7 out of 10", "7 of 13 opinions", "68%": the 7B model miscounts, so numbers come from code only.
+_NUM = r"(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty)"
+COUNT_RE = re.compile(rf"\b{_NUM}\s+(?:out\s+)?of\s+(?:the\s+)?{_NUM}\b|\b\d+(?:\.\d+)?\s?%|\bper\s?cent\b", re.I)
+
+
+def strip_counts(text: str) -> str:
+    """Drop sentences where the model still states a count despite the prompt."""
+    sents = re.split(r"(?<=[.!?])\s+", text.strip())
+    kept = [s for s in sents if not COUNT_RE.search(s)]
+    return " ".join(kept) if kept else text
+
+
+def lean(sentiment: Counter | dict) -> str:
+    """Overall direction in words, from the real counts, for the model to state without numbers."""
+    total = sum(sentiment.values())
+    if total < 3:
+        return "too few opinions to say"
+    neg, pos = sentiment.get("negative", 0) / total, sentiment.get("positive", 0) / total
+    if neg >= 0.6:
+        return "mostly negative"
+    if pos >= 0.6:
+        return "mostly positive"
+    if neg > pos * 1.5:
+        return "mixed, leaning negative"
+    if pos > neg * 1.5:
+        return "mixed, leaning positive"
+    return "mixed"
+
+
+def evidence_line(n_posts: int, sentiment: Counter | dict, topic: str | None) -> str:
+    """The one sentence with numbers in every answer, written by code so it is always right."""
+    total = sum(sentiment.values())
+    about = f" on {topic.replace('_', ' ')}" if topic else ""
+    if not total:
+        return f"Based on {n_posts} matching post{'s' if n_posts != 1 else ''}."
+    parts = ", ".join(f"{v} {s}" for s, v in sorted(sentiment.items(), key=lambda kv: -kv[1]))
+    return (f"Based on {n_posts} matching post{'s' if n_posts != 1 else ''} with {total} "
+            f"opinion{'s' if total != 1 else ''}{about}: {parts}.")

@@ -40,7 +40,7 @@ def main() -> None:
     if a.thin_evidence:
         print(f"WARNING: based on only {a.n_posts} post{'s' if a.n_posts != 1 else ''}; "
               "treat as anecdotes, not a trend.")
-    print("\n" + a.answer + "\n")
+    print("\n" + a.evidence + "\n" + a.answer + "\n")
     for s in a.sources:
         print(f"[{s['n']}] {s['title'][:70]} - {s['url']}")
 

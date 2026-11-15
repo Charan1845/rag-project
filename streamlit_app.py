@@ -156,6 +156,7 @@ if result:
 
     with st.container(border=True):
         st.subheader("What posters say", anchor=False)
+        st.caption(result.get("evidence", ""))
         st.markdown(result["answer"])
 
     st.subheader(f"Sources ({len(result['sources'])})", anchor=False)
