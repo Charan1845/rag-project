@@ -57,7 +57,13 @@ CITY_ALIASES = {
     "calcutta": "Kolkata",
     "sf": "San Francisco",
     "bay area": "San Francisco",
+    "sf bay area": "San Francisco",
     "san francisco": "San Francisco",
+    "silicon valley": "San Francisco",
+    "sv": "San Francisco",
+    "sunnyvale": "San Francisco",
+    "mountain view": "San Francisco",
+    "palo alto": "San Francisco",
     "nyc": "New York",
     "new york": "New York",
     "seattle": "Seattle",
@@ -112,10 +118,26 @@ def company(value: str | None) -> str | None:
     return _norm(value, COMPANY_ALIASES)
 
 
+VAGUE_PLACES = {"various", "multiple", "remote", "anywhere", "west coast", "east coast"}
+
+
 def city(value: str | None) -> str | None:
-    if value and value.strip().lower() in COUNTRIES:
+    if not value:
+        return None
+    value = value.split(",")[0].split("/")[0]  # "Hyderabad, Bangalore" -> first city mentioned
+    if value.strip().lower() in COUNTRIES | VAGUE_PLACES:
         return None
     return _norm(value, CITY_ALIASES)
+
+
+def find_in_text(text: str, aliases: dict[str, str]) -> str | None:
+    """First known alias that appears as a whole word in text (longest aliases checked first)."""
+    import re
+    low = text.lower()
+    for alias in sorted(aliases, key=len, reverse=True):
+        if re.search(rf"(?<![\w']){re.escape(alias)}(?![\w'])", low):
+            return aliases[alias]
+    return None
 
 
 COUNTRY_ALIASES = {
@@ -150,7 +172,10 @@ def record(rec: dict) -> dict:
     if the_country is None and the_city in INDIAN_CITIES:
         the_country = "India"
     return {**rec, "companies": companies, "city": the_city, "country": the_country,
-            "role": role(rec.get("role")), "opinions": opinions}
+            "role": role(rec.get("role")), "opinions": opinions,
+            # Some source titles already contain U+FFFD where a quote used to be; drop it.
+            "title": (rec.get("title") or "").replace("�", ""),
+            "text": (rec.get("text") or "").replace("�", "")}
 
 
 INDIAN_CITIES = {"Bangalore", "Hyderabad", "Pune", "Chennai", "Mumbai", "Delhi NCR", "Kolkata"}

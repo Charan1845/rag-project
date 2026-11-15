@@ -28,7 +28,10 @@ class Filters(BaseModel):
 
 FILTER_PROMPT = ChatPromptTemplate.from_messages([
     ("system", "Extract search filters from a question about workplaces. Leave a field null unless the "
-               "question names it. 'WLB' means work_life_balance; 'pay'/'salary'/'hikes' mean compensation; "
+               "question names it. Topic hints: 'WLB'/'hours'/'overtime' -> work_life_balance; "
+               "'pay'/'salary'/'hikes'/'bonus' -> compensation; 'manager'/'managers'/'boss'/'leadership' -> "
+               "management; 'promotion'/'growth' -> career_growth; 'layoffs'/'job security' -> "
+               "layoffs_job_security; 'interview'/'hiring' -> interview_hiring; 'WFH'/'RTO' -> remote_work. "
                "'SDE'/'developer' mean software engineer; 'fresher' means junior."),
     ("human", "{question}"),
 ])
@@ -40,10 +43,13 @@ ANSWER_PROMPT = ChatPromptTemplate.from_messages([
      "- Use ONLY the numbered posts below. Cite them like [1] or [2][3] after each claim.\n"
      "- Attribute everything: 'posters say', 'one commenter reports'. Never state claims about a "
      "company as fact.\n"
-     "- Mention both positive and negative views if they exist. Use the counts given.\n"
+     "- Mention both positive and negative views if they exist. The counts are of OPINIONS, not posts "
+     "(one post can hold several opinions): say e.g. '7 of 13 opinions were negative', never 'N posts'.\n"
+     "- Only attribute a view to a company if that post's 'company' field lists it.\n"
      "- If the posts do not answer the question, say so plainly.\n"
      "- 4-8 sentences. No names of people."),
-    ("human", "Question: {question}\n\nAcross {n} matching posts, opinion counts on this topic: {stats}\n\n"
+    ("human", "Question: {question}\n\n{n} posts match. Opinion counts across them ({total} opinions): "
+              "{stats}\n\n"
               "Posts:\n{context}"),
 ])
 
@@ -70,9 +76,10 @@ def _llm():
 def parse_filters(question: str) -> dict:
     f = (FILTER_PROMPT | _llm().with_structured_output(Filters, method="json_schema")).invoke(
         {"question": question})
+    # Exact matches against the alias lists beat the 7B model, which sometimes skips a field.
     return {
-        "company": normalize.company(f.company),
-        "city": normalize.city(f.city),
+        "company": normalize.find_in_text(question, normalize.COMPANY_ALIASES) or normalize.company(f.company),
+        "city": normalize.find_in_text(question, normalize.CITY_ALIASES) or normalize.city(f.city),
         "country": normalize.country(f.country),
         "role": normalize.role(f.role),
         "experience_level": f.experience_level if f.experience_level != "unknown" else None,
@@ -145,7 +152,8 @@ def ask(question: str, filters: dict | None = None, k: int = 8) -> Answer:
         f"{s['snippet'][:1200]}" for s in sources)
     stats = ", ".join(f"{v} {s}" for s, v in sentiment.most_common()) or "not available"
     text = (ANSWER_PROMPT | _llm()).invoke(
-        {"question": question, "n": len(matches), "stats": stats, "context": context}).content
+        {"question": question, "n": len(matches), "total": sum(sentiment.values()), "stats": stats,
+         "context": context}).content
 
     thin = len(matches) < MIN_EVIDENCE
     return Answer(question, f, dropped, len(matches), dict(sentiment), text, sources, thin)
