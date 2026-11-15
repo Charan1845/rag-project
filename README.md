@@ -38,13 +38,20 @@ A company tag is only kept if the post really names it (so "my 7 figure TCs" is 
 (`eval/labels.jsonl`, ids only, no post text). Relevant = the post says something about that company (or city)
 on that topic.
 
-| Retrieval | Precision@5 | Top source relevant |
-|---|---|---|
-| Whole-post chunks (v1) | 48% | 67% |
-| Extracted opinions (v2) | 51% | 73% |
+| Retrieval | Data | Precision@5 | Precision@3 | Top source relevant |
+|---|---|---|---|---|
+| Whole-post chunks (v1) | HN keyword search | 48% | 55% | 67% |
+| Extracted opinions (v2) | HN keyword search | 51% | 55% | 73% |
+| Extracted opinions (v2) | + Ask HN threads, body-only company check | 53% | 61% | 67% |
 
-The main limit is coverage, not ranking: e.g. only 8 posts mention TCS and none discuss its hours.
-That is why the next step is better sources (Ask HN threads, Reddit).
+What moved the numbers:
+- Ask HN threads tripled the matching posts for Big Tech (Google career growth 19 -> 109, Meta WLB 5 -> 24)
+  and lifted Meta WLB from 1/5 to 4/5 relevant sources.
+- Crediting a company only when the post body names it (not the thread title) removed replies like
+  "here is what I make at my job" in "Ask HN: How much do you make at Amazon?".
+- Indian IT (TCS, Infosys, Wipro) did not improve: Ask HN barely discusses them. Reddit is the fix.
+
+With 15 questions, one question changing its top source moves "top source relevant" by ~7 points.
 
 ```bash
 python -m workplace_rag.evaluate run --mode opinion

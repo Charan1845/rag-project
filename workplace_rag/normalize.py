@@ -110,7 +110,7 @@ def _norm(value: str | None, aliases: dict[str, str], title: bool = True) -> str
 
 # Words that mean the model returned a category ("Indian startups") instead of an employer.
 GENERIC_COMPANY_WORDS = (
-    "compan", "startup", "consultanc", "faang", "maang", "big tech", "employer", "firm",
+    "compan", "startup", "consultanc", "faang", "maang", "big tech", "bigtech", "employer", "firm",
     "corporat", "mnc", "gcc", "service", "government", "agency", "industry",
 )
 COUNTRIES = {"india", "usa", "us", "united states", "uk", "united kingdom", "canada", "germany", "europe"}
@@ -176,8 +176,10 @@ def mentioned(name: str, text: str) -> bool:
 
 def record(rec: dict) -> dict:
     """Re-normalize an extracted record (safe to run repeatedly)."""
-    text = f"{rec.get('title') or ''}\n{rec.get('text') or ''}"
-    # Drop employers the model inferred but the post never names (e.g. "TCs" read as TCS).
+    # Drop employers the model inferred but the post never names (e.g. "TCs" read as TCS). Only the
+    # post body counts, not the thread title: replies to "Ask HN: How much do you make at Amazon?"
+    # are often about the poster's own, different employer.
+    text = rec.get("text") or ""
     companies = sorted({c for c in map(company, rec.get("companies", [])) if c and mentioned(c, text)})
     opinions = []
     for op in rec.get("opinions", []):
