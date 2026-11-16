@@ -36,7 +36,7 @@ def main() -> None:
 
     a = ask(args.question)
     print(f"Filters: {a.filters}" + (f"  (relaxed: dropped {a.dropped_filters})" if a.dropped_filters else ""))
-    print(f"Matching posts: {a.n_posts}   Sentiment: {a.sentiment}")
+    print(f"Matching posts: {a.n_posts}   Opinions: {sum(a.sentiment.values())}")
     if a.thin_evidence:
         print(f"WARNING: based on only {a.n_posts} post{'s' if a.n_posts != 1 else ''}; "
               "treat as anecdotes, not a trend.")

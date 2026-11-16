@@ -11,7 +11,9 @@ and get an answer built from community discussions, with **counts and citations*
   country, experience level, and per-topic opinions with sentiment.
 - Questions are turned into **exact filters** over that structure, so "TCS in Hyderabad" really means posts about TCS
   in Hyderabad, not whatever is semantically nearby.
-- Sentiment counts are computed over **all** matching posts, not just the top-k retrieved ones.
+- Evidence counts are computed over **all** matching posts, not just the top-k retrieved ones, and the overall
+  lean of their opinions steers the answer's wording. No "% negative" score is shown: forum posts skew
+  negative, so it would read like a company rating it isn't.
 - When evidence is thin, the answer says so: *"based on only N posts"*. If nothing matches, filters are relaxed one
   at a time and the answer reports which were dropped.
 - Answers are phrased as *"posters say…"*, never as facts about a company.
@@ -84,7 +86,7 @@ streamlit run streamlit_app.py             # web UI at http://localhost:8501
 ```
 
 The web UI shows the detected filters (which you can override), matching post and opinion counts,
-a sentiment breakdown, a thin-evidence warning, the answer, and each cited source with its extracted opinions.
+a thin-evidence warning, the answer, and each cited source with its extracted opinions.
 
 ## Data and ethics
 

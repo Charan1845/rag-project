@@ -330,6 +330,7 @@ def evidence_line(n_posts: int, sentiment: Counter | dict, topic: str | None) ->
     about = f" on {topic.replace('_', ' ')}" if topic else ""
     if not total:
         return f"Based on {n_posts} matching post{'s' if n_posts != 1 else ''}."
-    parts = ", ".join(f"{v} {s}" for s, v in sorted(sentiment.items(), key=lambda kv: -kv[1]))
+    # No positive/negative split here: forum posts skew negative, so the counts read like a company
+    # rating they are not. The lean still steers the answer's wording.
     return (f"Based on {n_posts} matching post{'s' if n_posts != 1 else ''} with {total} "
-            f"opinion{'s' if total != 1 else ''}{about}: {parts}.")
+            f"opinion{'s' if total != 1 else ''}{about}.")

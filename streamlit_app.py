@@ -25,7 +25,6 @@ EXAMPLES = [
     "Is Infosys good for freshers?",
     "What do people in Bangalore say about pay?",
 ]
-SENTIMENTS = ["negative", "mixed", "neutral", "positive"]
 TOPICS = [t for t in get_args(Topic) if t != "other"]
 SOURCE_NAMES = {"hackernews": "Hacker News", "stackexchange": "Workplace Stack Exchange", "reddit": "Reddit"}
 
@@ -137,24 +136,15 @@ if result:
         st.warning(result["answer"], title="No matching posts", icon=":material/search_off:")
         st.stop()
 
-    sentiment = result["sentiment"]
-    n_opinions = sum(sentiment.values())
+    n_opinions = sum(result["sentiment"].values())
     with st.container(horizontal=True):
         st.metric("Matching posts", result["n_posts"], border=True)
         st.metric("Opinions", n_opinions, border=True)
-        st.metric("Negative", f"{sentiment.get('negative', 0) / n_opinions:.0%}" if n_opinions else "n/a",
-                  border=True)
 
     if result["thin_evidence"]:
         n = result["n_posts"]
         st.warning(f"Based on only {n} post{'s' if n != 1 else ''} (under {MIN_EVIDENCE}). Treat this as anecdotes, "
                    "not a trend.", title="Thin evidence", icon=":material/warning:")
-
-    if n_opinions:
-        chart = pd.DataFrame([{"opinions": "Sentiment", **{s: sentiment.get(s, 0) for s in SENTIMENTS}}])
-        st.bar_chart(chart, x="opinions", y=SENTIMENTS, color=["#d64545", "#e8a33d", "#9aa0a6", "#3c9a5f"], horizontal=True,
-                     stack="normalize", height=150, x_label="", y_label="",
-                     alt="Share of negative, mixed, neutral and positive opinions")
 
     with st.container(border=True):
         st.subheader("What posters say", anchor=False)
