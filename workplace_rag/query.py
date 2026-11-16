@@ -176,7 +176,8 @@ def match(records: list[dict], f: dict) -> list[dict]:
 
 def _source(n: int, r: dict, snippet: str, opinions: list[dict]) -> dict:
     return {"n": n, "id": r["id"], "url": r["url"], "title": r["title"], "snippet": snippet.replace("�", ""),
-            "opinions": opinions, "company": ", ".join(r["companies"]), "city": r["city"]}
+            "opinions": opinions, "company": ", ".join(r["companies"]), "city": r["city"],
+            "source": r.get("source", "hackernews")}
 
 
 def retrieve_posts(question: str, f: dict, matches: list[dict], k: int) -> list[dict]:

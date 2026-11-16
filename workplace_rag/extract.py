@@ -68,7 +68,9 @@ PROMPT = ChatPromptTemplate.from_messages(
 
 
 def build_chain():
-    llm = ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0, num_ctx=4096)
+    llm = ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0, num_ctx=4096,
+                     # Cap output: some posts send the model into an endless loop that blocks Ollama.
+                     num_predict=1024)
     return PROMPT | llm.with_structured_output(Extraction, method="json_schema")
 
 

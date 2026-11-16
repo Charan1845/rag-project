@@ -42,7 +42,7 @@ def main() -> None:
               "treat as anecdotes, not a trend.")
     print("\n" + a.evidence + "\n" + a.answer + "\n")
     for s in a.sources:
-        print(f"[{s['n']}] {s['title'][:70]} - {s['url']}")
+        print(f"[{s['n']}] ({s['source']}) {s['title'][:70]} - {s['url']}")
 
 
 if __name__ == "__main__":

@@ -27,6 +27,7 @@ EXAMPLES = [
 ]
 SENTIMENTS = ["negative", "mixed", "neutral", "positive"]
 TOPICS = [t for t in get_args(Topic) if t != "other"]
+SOURCE_NAMES = {"hackernews": "Hacker News", "stackexchange": "Workplace Stack Exchange", "reddit": "Reddit"}
 
 
 # ---------- cached data and model calls ----------
@@ -80,7 +81,8 @@ with st.sidebar:
     st.table(pd.DataFrame(data["top_companies"], columns=["Company", "Posts"]).set_index("Company"),
              alt="Companies with the most workplace posts")
     st.caption(
-        "Sources: Hacker News, via its official search API. Author names are not stored. "
+        "Sources: Hacker News and The Workplace Stack Exchange (CC BY-SA), via their official APIs. "
+        "Author names are not stored. "
         "Answers summarize what posters say; they are anecdotes, not verified facts about any company."
     )
 
@@ -169,4 +171,5 @@ if result:
                 st.markdown(f"{icon} **{label(op['topic'])}**: {op['claim']}")
             st.caption("Excerpt")
             st.text(s["snippet"][:800] + ("..." if len(s["snippet"]) > 800 else ""))
-            st.link_button("Open on Hacker News", s["url"], icon=":material/open_in_new:")
+            st.link_button(f"Open on {SOURCE_NAMES.get(s.get('source', ''), 'source site')}", s["url"],
+                           icon=":material/open_in_new:")

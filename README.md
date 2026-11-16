@@ -3,7 +3,7 @@
 Ask what people actually say about working somewhere, e.g. *"How is work-life balance for SDEs at TCS in Hyderabad?"*,
 and get an answer built from community discussions, with **counts and citations** instead of a vague summary.
 
-> Status: 🚧 MVP. Hacker News source working; Reddit source next.
+> Status: 🚧 MVP. Hacker News and Workplace Stack Exchange sources working; Reddit source next.
 
 ## Why not just ask Glassdoor or ChatGPT?
 
@@ -21,6 +21,7 @@ and get an answer built from community discussions, with **counts and citations*
 ```
 ingest_hn.py          keyword search over HN comments  ->  data/raw/hn.jsonl
 ingest_hn_threads.py  whole "Ask HN" workplace threads  ->  data/raw/hn_threads.jsonl
+ingest_stackexchange.py  The Workplace Stack Exchange Q&A (no key)  ->  data/raw/stackexchange.jsonl
 ingest_reddit.py      Reddit Data API (needs keys in .env)  ->  data/raw/reddit.jsonl
 extract.py            qwen2.5:7b (Ollama), JSON-schema output  ->  data/processed/posts.jsonl
 index.py              nomic-embed-text  ->  Chroma: post chunks + one document per extracted opinion
@@ -50,6 +51,10 @@ What moved the numbers:
 - Crediting a company only when the post body names it (not the thread title) removed replies like
   "here is what I make at my job" in "Ask HN: How much do you make at Amazon?".
 - Indian IT (TCS, Infosys, Wipro) did not improve: Ask HN barely discusses them. Reddit is the fix.
+
+Workplace Stack Exchange (first 54 of 646 prefiltered posts extracted so far) left these scores unchanged: it
+rarely names employers, so it helps India/topic questions ("notice periods in India") rather than the
+company questions in this set.
 
 With 15 questions, one question changing its top source moves "top source relevant" by ~7 points.
 
@@ -83,8 +88,9 @@ a sentiment breakdown, a thin-evidence warning, the answer, and each cited sourc
 
 ## Data and ethics
 
-- Sources: official APIs only (Hacker News via Algolia; Reddit Data API with app-only, read-only auth).
-  No Glassdoor/AmbitionBox scraping.
+- Sources: official APIs only (Hacker News via Algolia; The Workplace Stack Exchange via the Stack Exchange API;
+  Reddit Data API with app-only, read-only auth). No Glassdoor/AmbitionBox scraping.
+- Stack Exchange content is CC BY-SA: every cited source links back to the original question or answer.
 - Author names are not stored. Raw data is never committed (`data/` is gitignored).
 - Non-commercial project for learning.
 
@@ -93,6 +99,7 @@ a sentiment breakdown, a thin-evidence warning, the answer, and each cited sourc
 - [x] Streamlit UI
 - [x] Retrieval relevance eval + opinion-level retrieval
 - [x] Ask HN thread source
+- [x] Workplace Stack Exchange source (India-focused queries + `india` tag)
 - [ ] Reddit source (code ready; needs API keys)
 - [ ] Supporting quote per opinion + first-hand flag in extraction
 - [ ] Extraction accuracy (~200 hand-labelled posts), answer faithfulness, Stack Overflow survey benchmarks
