@@ -3,12 +3,17 @@
 Ask what people actually say about working somewhere, e.g. *"How is work-life balance for SDEs at TCS in Hyderabad?"*,
 and get an answer built from community discussions, with **counts and citations** instead of a vague summary.
 
+<!-- Screenshot: save as docs/screenshot.png, then replace this comment with:
+![Workplace insights app answering "What do people in Bangalore say about pay?"](docs/screenshot.png) -->
+
 > Status: 🚧 MVP. Hacker News and Workplace Stack Exchange sources working; Reddit source next.
 
 ## Why not just ask Glassdoor or ChatGPT?
 
 - Posts are messy free text. Before indexing, a local LLM **extracts structure** from each one: company, role, city,
   country, experience level, and per-topic opinions with sentiment.
+- Questions about a country ("in India…") filter on it; with a company named, country only excludes posts
+  that say they are about somewhere else.
 - Questions are turned into **exact filters** over that structure, so "TCS in Hyderabad" really means posts about TCS
   in Hyderabad, not whatever is semantically nearby.
 - Evidence counts are computed over **all** matching posts, not just the top-k retrieved ones, and the overall
@@ -18,17 +23,51 @@ and get an answer built from community discussions, with **counts and citations*
   at a time and the answer reports which were dropped.
 - Answers are phrased as *"posters say…"*, never as facts about a company.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Ingest["Ingest (official APIs)"]
+        HN[Hacker News<br/>comments + Ask HN threads]
+        SE[Workplace<br/>Stack Exchange]
+        RD[Reddit<br/>pending API approval]
+    end
+    subgraph Offline["Offline, once per post"]
+        EX["Extract with qwen2.5:7b<br/>company · role · city · country<br/>level · opinions (topic, claim)"]
+        NM[Normalize<br/>aliases, drop employers<br/>the post never names]
+    end
+    subgraph Store
+        REC[(Structured<br/>records)]
+        VEC[(Chroma<br/>opinion + chunk<br/>embeddings)]
+    end
+    subgraph Query["At question time"]
+        Q[Question] --> F[Filters<br/>keywords first, LLM fallback]
+        F --> M[Exact match over records<br/>relax if empty]
+        M --> C[Counts + lean<br/>computed in code]
+        M --> R[Rank opinions<br/>within matches]
+        R --> A[Cited answer<br/>'posters say…']
+        C --> A
+    end
+    HN & SE & RD --> EX --> NM --> REC
+    NM --> VEC
+    REC --> M
+    VEC --> R
+```
+
+The LLM never does arithmetic: post and opinion counts, the overall lean and the thin-evidence warning are
+computed in code, and number sentences are stripped from the generated text.
+
 ## Pipeline
 
 ```
-ingest_hn.py          keyword search over HN comments  ->  data/raw/hn.jsonl
-ingest_hn_threads.py  whole "Ask HN" workplace threads  ->  data/raw/hn_threads.jsonl
-ingest_stackexchange.py  The Workplace Stack Exchange Q&A (no key)  ->  data/raw/stackexchange.jsonl
-ingest_reddit.py      Reddit Data API (needs keys in .env)  ->  data/raw/reddit.jsonl
-extract.py            qwen2.5:7b (Ollama), JSON-schema output  ->  data/processed/posts.jsonl
-index.py              nomic-embed-text  ->  Chroma: post chunks + one document per extracted opinion
-query.py              question -> filters -> matching posts -> counts + top opinions -> cited answer
-evaluate.py           retrieval relevance on a labelled question set
+ingest_hn.py              keyword search over HN comments           ->  data/raw/hn.jsonl
+ingest_hn_threads.py      whole "Ask HN" workplace threads          ->  data/raw/hn_threads.jsonl
+ingest_stackexchange.py   The Workplace Stack Exchange Q&A (no key) ->  data/raw/stackexchange.jsonl
+ingest_reddit.py          Reddit Data API (needs keys in .env)      ->  data/raw/reddit.jsonl
+extract.py                qwen2.5:7b (Ollama), JSON-schema output   ->  data/processed/posts.jsonl
+index.py                  nomic-embed-text -> Chroma: post chunks + one document per extracted opinion
+query.py                  question -> filters -> matching posts -> counts + top opinions -> cited answer
+evaluate.py               retrieval relevance on a labelled question set
 ```
 
 Retrieval ranks the short extracted opinions ("TCS: managers expect weekend calls") rather than whole

@@ -106,7 +106,7 @@ def parse_filters(question: str) -> dict:
         "company": (normalize.find_in_text(question, normalize.COMPANY_ALIASES)
                     or normalize.company(f.company) or named_employer(question)),
         "city": normalize.find_in_text(question, normalize.CITY_ALIASES) or normalize.city(f.city),
-        "country": normalize.country(f.country),
+        "country": question_country(question) or normalize.country(f.country),
         "role": keyword_match(question, ROLE_KEYWORDS) or normalize.role(f.role),
         "experience_level": level or (f.experience_level if f.experience_level != "unknown" else None),
         "topic": topic,
@@ -139,6 +139,20 @@ ROLE_KEYWORDS = {
 }
 
 
+COUNTRY_KEYWORDS = {
+    "India": r"india|indian|bharat",
+    "United States": r"usa|united states|america|american",
+    "United Kingdom": r"uk|united kingdom|england|britain|british",
+}
+
+
+def question_country(question: str) -> str | None:
+    # "US" only in capitals: lowercase "us" is the pronoun ("tell us about...").
+    if re.search(r"\bU\.?S\.?\b", question):
+        return "United States"
+    return keyword_match(question, COUNTRY_KEYWORDS)
+
+
 def keyword_match(question: str, table: dict[str, str]) -> str | None:
     q = question.lower()
     for value, pattern in table.items():
@@ -161,7 +175,10 @@ def match(records: list[dict], f: dict) -> list[dict]:
         if f.get("city") and r["city"] != f["city"]:
             continue
         if f.get("country") and r["country"] != f["country"]:
-            continue
+            # With a company named, country is soft: a TCS post that never says "India" still counts,
+            # one that says it is about the US office does not.
+            if not f.get("company") or r["country"]:
+                continue
         # Role and level are soft: most posts never state them, so only exclude posts that state a
         # *different* one (a manager's post when asking about freshers), not posts that are silent.
         if f.get("role") and r["role"] and r["role"] != f["role"]:
