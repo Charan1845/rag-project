@@ -26,33 +26,59 @@ and get an answer built from community discussions, with **counts and citations*
 ## Architecture
 
 ```mermaid
-flowchart LR
-    subgraph Ingest["Ingest (official APIs)"]
-        HN[Hacker News<br/>comments + Ask HN threads]
-        SE[Workplace<br/>Stack Exchange]
-        RD[Reddit<br/>pending API approval]
+%%{init: {"flowchart": {"wrappingWidth": 260, "nodeSpacing": 40, "rankSpacing": 45}}}%%
+flowchart TB
+    subgraph OFF["① Build the index (offline)"]
+        HN["Hacker News<br/>comments + Ask HN threads"]:::src
+        SE["Workplace Stack Exchange<br/>Q&A · CC BY-SA"]:::src
+        RD["Reddit<br/>awaiting API approval"]:::pending
+        EX["<b>Extract structure</b> · qwen2.5:7b<br/>company · role · city · country<br/>level · opinions by topic"]:::llm
+        NM["<b>Normalize and verify</b><br/>canonical names · keep a company<br/>only if the post body names it"]:::code
+        HN --> EX
+        SE --> EX
+        RD -.-> EX
+        EX --> NM
     end
-    subgraph Offline["Offline, once per post"]
-        EX["Extract with qwen2.5:7b<br/>company · role · city · country<br/>level · opinions (topic, claim)"]
-        NM[Normalize<br/>aliases, drop employers<br/>the post never names]
+
+    subgraph DB["Stores"]
+        REC[("<b>Structured records</b><br/>2,249 posts · 4,857 opinions")]:::store
+        VEC[("<b>Chroma vectors</b><br/>opinions + post chunks<br/>nomic-embed-text")]:::store
     end
-    subgraph Store
-        REC[(Structured<br/>records)]
-        VEC[(Chroma<br/>opinion + chunk<br/>embeddings)]
-    end
-    subgraph Query["At question time"]
-        Q[Question] --> F[Filters<br/>keywords first, LLM fallback]
-        F --> M[Exact match over records<br/>relax if empty]
-        M --> C[Counts + lean<br/>computed in code]
-        M --> R[Rank opinions<br/>within matches]
-        R --> A[Cited answer<br/>'posters say…']
-        C --> A
-    end
-    HN & SE & RD --> EX --> NM --> REC
+    NM --> REC
     NM --> VEC
-    REC --> M
-    VEC --> R
+
+    subgraph ON["② Answer a question (online, 10–30 s)"]
+        Q(["Question"]):::io
+        PF["<b>Parse filters</b><br/>keywords first · LLM fallback"]:::code
+        MT["<b>Match exactly</b><br/>company · city · country · topic<br/>relax a filter if nothing matches"]:::code
+        CT["<b>Count in code</b><br/>posts · opinions · overall lean<br/>thin-evidence warning"]:::code
+        RK["<b>Rank opinions</b><br/>only inside matched posts"]:::code
+        GN["<b>Write the answer</b> · qwen2.5:7b<br/>'posters say…' · cites every claim<br/>numbers stripped, added by code"]:::llm
+        OUT(["Answer · evidence · sources"]):::io
+        Q --> PF --> MT
+        MT --> CT
+        MT --> RK
+        CT --> GN
+        RK --> GN
+        GN --> OUT
+    end
+
+    REC ~~~ Q
+    REC -- filter --> MT
+    VEC -- similarity --> RK
+
+    classDef src fill:#e8f1fb,stroke:#3b82c4,color:#0b2540
+    classDef pending fill:#f4f4f4,stroke:#9aa0a6,color:#5f6368,stroke-dasharray:4 3
+    classDef llm fill:#f1e8fb,stroke:#8a4fd0,color:#2b0f4d
+    classDef code fill:#e7f5ec,stroke:#2f9e5b,color:#0d3b20
+    classDef store fill:#fff6e0,stroke:#d49a1a,color:#4a3300
+    classDef io fill:#ffffff,stroke:#5f6368,color:#202124
+    style OFF fill:#fafbfc,stroke:#c9ced6
+    style DB fill:#fffdf5,stroke:#e6d3a3
+    style ON fill:#fafbfc,stroke:#c9ced6
 ```
+
+Colours: 🟦 data sources · 🟪 LLM steps (qwen2.5:7b) · 🟩 deterministic code · 🟨 stores. The LLM extracts and writes; everything that must be exact (matching, counts, the lean) is plain code, and filter parsing only falls back to the LLM when no keyword matches.
 
 The LLM never does arithmetic: post and opinion counts, the overall lean and the thin-evidence warning are
 computed in code, and number sentences are stripped from the generated text.
