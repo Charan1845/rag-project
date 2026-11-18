@@ -39,11 +39,15 @@ PROMPT = ChatPromptTemplate.from_messages(
             "- role: the poster's own job. 'I am a senior engineer' -> 'software engineer'. "
             "city/country: where the job is, e.g. 'Indian startup' -> country India.\n"
             "- One opinion per distinct (topic, company) claim, at most 5. claim is a short neutral paraphrase, "
-            "not a quote, and never includes names of people.",
+            "not a quote, and never includes names of people.\n"
+            "- Record the poster's OWN view. If the poster repeats a claim in order to reject it ('articles say X, "
+            "that is nonsense'), the opinion is the rejection (not X), or nothing.\n"
+            "- Every claim must be said in THIS post. Never reuse details from the examples below.",
         ),
         ("human", "Thread title: Ask HN: Is it worth joining a service company?\n\nPost:\n"
                   "I spent 3 years at TCS in Hyderabad as a developer. Salary hikes were 4-6% a year and my manager "
-                  "expected weekend calls during releases. The training program for freshers was actually good though."),
+                  "expected weekend calls during releases. People online say freshers sit on the bench for months; "
+                  "that never happened to anyone in my batch. The training program for freshers was actually good."),
         ("ai", json.dumps({
             "is_workplace_experience": True, "companies": ["TCS"], "role": "software engineer",
             "city": "Hyderabad", "country": "India", "experience_level": "mid",
@@ -52,6 +56,8 @@ PROMPT = ChatPromptTemplate.from_messages(
                  "claim": "Annual raises were low, around 4-6%."},
                 {"topic": "work_life_balance", "sentiment": "negative", "company": "TCS",
                  "claim": "Managers expected weekend calls during releases."},
+                {"topic": "career_growth", "sentiment": "positive", "company": "TCS",
+                 "claim": "Freshers in the poster's batch were not left on the bench, contrary to online claims."},
                 {"topic": "learning_tech", "sentiment": "positive", "company": "TCS",
                  "claim": "The fresher training program was good."},
             ],

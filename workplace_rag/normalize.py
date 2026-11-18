@@ -1,5 +1,7 @@
 """Map the many spellings of companies, cities and roles onto one canonical name."""
 
+import re
+
 COMPANY_ALIASES = {
     "tcs": "TCS",
     "tata consultancy services": "TCS",
@@ -174,6 +176,30 @@ def mentioned(name: str, text: str) -> bool:
     return False
 
 
+_STOP = set("""the a an and or but of to in on at for with from by about as is are was were be been being have has had
+do does did not no this that these those it its they them their there here than then so such very more most much many
+some any all each other into over under also just only can could would should will may might must people employees
+company companies poster posters author work working worked job jobs""".split())
+# Placeholders the extractor sometimes emits instead of leaving opinions empty.
+_EMPTY_CLAIM = re.compile(r"^(not (mentioned|applicable|specified)|n/?a|none|no mention\b|the post does not)", re.I)
+MIN_GROUNDING = 0.25
+
+
+def _words(text: str) -> set[str]:
+    return {w[:5] for w in re.findall(r"[a-z][a-z'-]{3,}", text.lower()) if w not in _STOP}
+
+
+def grounded(claim: str, text: str) -> bool:
+    """Do enough of the claim's content words (5-letter prefixes, so "managers" ~ "management") appear in
+    the post? Catches claims the 7B extractor copied from its own few-shot example ("managers expected
+    weekend calls during releases" in posts that never mention weekends) or invented outright.
+    Measured on the full dataset: drops 4% of opinions, including all 8 copied from the example."""
+    if _EMPTY_CLAIM.match(claim.strip()):
+        return False
+    cw = _words(claim)
+    return not cw or len(cw & _words(text)) / len(cw) >= MIN_GROUNDING
+
+
 def record(rec: dict) -> dict:
     """Re-normalize an extracted record (safe to run repeatedly)."""
     # Drop employers the model inferred but the post never names (e.g. "TCs" read as TCS). Only the
@@ -183,6 +209,8 @@ def record(rec: dict) -> dict:
     companies = sorted({c for c in map(company, rec.get("companies", [])) if c and mentioned(c, text)})
     opinions = []
     for op in rec.get("opinions", []):
+        if not grounded(op.get("claim") or "", f"{rec.get('title') or ''} {text}"):
+            continue
         op = {**op, "company": company(op.get("company"))}
         if op["company"] and not mentioned(op["company"], text):
             op["company"] = None

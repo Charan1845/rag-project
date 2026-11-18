@@ -94,6 +94,7 @@ extract.py                qwen2.5:7b (Ollama), JSON-schema output   ->  data/pro
 index.py                  nomic-embed-text -> Chroma: post chunks + one document per extracted opinion
 query.py                  question -> filters -> matching posts -> counts + top opinions -> cited answer
 evaluate.py               retrieval relevance on a labelled question set
+faithfulness.py           is each answer claim supported by the post it cites?
 ```
 
 Retrieval ranks the short extracted opinions ("TCS: managers expect weekend calls") rather than whole
@@ -111,6 +112,7 @@ on that topic.
 | Whole-post chunks (v1) | HN keyword search | 48% | 55% | 67% |
 | Extracted opinions (v2) | HN keyword search | 51% | 55% | 73% |
 | Extracted opinions (v2) | + Ask HN threads, body-only company check | 53% | 61% | 67% |
+| Extracted opinions (v2) | + grounding check on extracted opinions | 52% | 59% | 67% |
 
 What moved the numbers:
 - Ask HN threads tripled the matching posts for Big Tech (Google career growth 19 -> 109, Meta WLB 5 -> 24)
@@ -129,6 +131,42 @@ With 15 questions, one question changing its top source moves "top source releva
 python -m workplace_rag.evaluate run --mode opinion
 python -m workplace_rag.evaluate label     # prints sources that still need a label
 python -m workplace_rag.evaluate score
+```
+
+### Answer faithfulness
+
+Relevant sources don't guarantee a faithful answer, so this checks the generated text too. Each answer to
+the 15 questions is split into claims, one per citation group ("A [2], while B [3][5]" is claim A for post 2
+and claim B for posts 3 and 5), and every (claim, cited post) pair was labelled by hand against the
+**original post**, not our extracted summary of it.
+
+| Judge | Pairs | Supported | Partial | Unsupported | Sentences fully supported |
+|---|---|---|---|---|---|
+| **Hand labels** | 78 | **54%** | 35% | **12%** | **47%** |
+| qwen2.5:7b as judge | 78 | 85% | 14% | 1% | 76% |
+
+- 70% of answer sentences carry a citation; the rest are framing ("overall, posters lean negative"), whose
+  numbers come from code.
+- **An LLM judge of the same size is not usable here.** It agreed with the hand labels on 54% of pairs and
+  caught 1 of 9 unsupported claims, even after asking it for the post's stance instead of a verdict. It
+  noticed that a post *denied* a claim and still called the claim supported.
+- **6 of the 9 unsupported claims came from extraction, not generation.** The answer model faithfully
+  repeated a wrong extracted opinion:
+  - 2 were copied from the extraction prompt's own few-shot example ("managers expected weekend calls during
+    releases", in posts that never mention weekends). Fixed: extracted opinions must now share enough content
+    words with their post (`normalize.grounded`), which drops 4% of opinions, including every copied one.
+  - 2 recorded a claim the poster was *rejecting* ("kickbacks to managers… these are nonsense") as their
+    opinion. Fixed in the extraction prompt (verified on that post; applies on the next re-extraction).
+  - 2 put the right claim under the wrong subject (another employer's work-life balance under Microsoft).
+- The remaining 3 are the answer model citing the wrong post or flipping a comparison. Still open.
+
+Labels are in `eval/faithfulness_labels.jsonl` (ids only) and apply to one stored set of answers;
+regenerating the answers needs new labels.
+
+```bash
+python -m workplace_rag.faithfulness generate
+python -m workplace_rag.faithfulness judge
+python -m workplace_rag.faithfulness score
 ```
 
 Everything runs locally and free (tested on an RTX 5060 Laptop GPU with 8 GB of VRAM).
@@ -169,4 +207,6 @@ a thin-evidence warning, the answer, and each cited source with its extracted op
 - [x] Workplace Stack Exchange source (India-focused queries + `india` tag)
 - [ ] Reddit source (code ready; needs API keys)
 - [ ] Supporting quote per opinion + first-hand flag in extraction
-- [ ] Extraction accuracy (~200 hand-labelled posts), answer faithfulness, Stack Overflow survey benchmarks
+- [x] Answer faithfulness eval (hand-labelled) + grounding check on extracted opinions
+- [ ] Re-extract all posts with the new prompt (rejected claims, no example leakage), then re-label faithfulness
+- [ ] Extraction accuracy (~200 hand-labelled posts), Stack Overflow survey benchmarks
